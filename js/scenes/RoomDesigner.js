@@ -22,8 +22,13 @@ export const init = async model => {
    let showWhiteboard = true;
    let leftButtonPrev = false;
 
-   let Aswitch = false;
-   let Condswitch = false;
+   let wbFirstTime = true;
+   let wbSwitch = false;
+   let wbCondswitch = false;
+
+   let pFirstTime = true;
+   let pSwitch = false;
+   let pCondswitch = false;
 
    const roomScale = 20;
 
@@ -35,7 +40,7 @@ export const init = async model => {
       g2.setColor('black');
       g2.fillText('White Board', .5, .9, 'center');
 
-      if (g2.mouseState() == 'press' && !whiteBoard.isDrawing ) {
+      if (pSwitch && g2.mouseState() == 'press' && !whiteBoard.isDrawing ) {
          const uvz = g2.getUVZ(whiteBoard);
          if (uvz && uvz[0]>.1 && uvz[0]<.9) {
             whiteBoard.tmpPath[0] = uvz
@@ -44,7 +49,7 @@ export const init = async model => {
       } else if (g2.mouseState() == 'drag' && whiteBoard.isDrawing) {
          const uvz = g2.getUVZ(whiteBoard);
 
-         if (!Aswitch && uvz && uvz[0]>.1 && uvz[0]<.9) {
+         if (pSwitch && uvz && uvz[0]>.1 && uvz[0]<.9) {
             whiteBoard.isDrawingTmp = true;
             const [prevU, prevV, _] =  whiteBoard.tmpPath[0];
             const [nextU, nextV, nextZ] =  uvz;
@@ -57,7 +62,7 @@ export const init = async model => {
 
          }
 
-      } else if (!Aswitch && g2.mouseState() == 'release' && whiteBoard.isDrawing) {
+      } else if (pSwitch && g2.mouseState() == 'release' && whiteBoard.isDrawing) {
          const uvz = g2.getUVZ(whiteBoard);
 
          const [prevU, prevV, _] =  whiteBoard.tmpPath[0];
@@ -82,7 +87,7 @@ export const init = async model => {
          g2.drawPath(whiteBoard.paths[n]);
       }
 
-      if (!Aswitch && whiteBoard.tmpPath.length > 0 && whiteBoard.isDrawingTmp){
+      if (pSwitch && whiteBoard.tmpPath.length > 0 && whiteBoard.isDrawingTmp){
          g2.setColor([0.5,0.5,0.5]);
          g2.lineWidth(.009);
 
@@ -105,7 +110,8 @@ export const init = async model => {
                direction: "vertical",
                centerY:(-0.5 + (Math.min(startV, endV) + (Math.abs(startV - endV) / 2))) * scale,
                centerX: (-0.5 + (startU)) * scale,
-               length: (Math.abs(startV - endV) / 2) * scale
+               length: (Math.abs(startV - endV) / 2) * scale,
+               color: [panel.Rcolor, panel.Gcolor, panel.Bcolor, panel.opacity]
             }
 
          } else {
@@ -113,13 +119,35 @@ export const init = async model => {
                direction: "horizontal",
                centerX: (-0.5 + (Math.min(startU, endU) + (Math.abs(startU - endU) / 2))) * scale,
                centerY: (-0.5 + (startV)) * scale,
-               length: (Math.abs(startU - endU) / 2) * scale
+               length: (Math.abs(startU - endU) / 2) * scale,
+               color: [panel.Rcolor, panel.Gcolor, panel.Bcolor, panel.opacity]
             }
          }
       })
    }
    
-   let handPanel = model.add('cube').texture('media/textures/colors.jpg').opacity(.01);
+   // Create the panel
+   let panel = model.add('cube').texture(() => {
+      g2.setColor('white');
+      g2.fillRect(.2,.1,.6,1);
+      g2.setColor('black');
+      g2.fillText('Controller', .5, .9, 'center');
+      if (! g2.drawWidgets(panel)){
+          if (g2.mouseState() == 'press') {
+              if (panel.ST) {
+                  panel.ST = null;
+              }
+          }
+      }
+   });
+   panel.opacity = .5;
+   panel.Rcolor = .5;
+   panel.Gcolor = .5;
+   panel.Bcolor = .5;
+   g2.addWidget(panel, 'slider', .5, .8, '#80ffff', 'opacity', value => panel.opacity = value);
+   g2.addWidget(panel, 'slider', .5, .7, [panel.Rcolor, 0, 0, 1], 'R', value => panel.Rcolor = value);
+   g2.addWidget(panel, 'slider', .5, .6, [0, panel.Gcolor, 0, 1], 'G', value => panel.Gcolor = value);
+   g2.addWidget(panel, 'slider', .5, .5, [0, 0, panel.Bcolor, 1], 'B', value => panel.Bcolor = value);
 
    // A list of wallIds used to determine if a canvas path has
    // already been added to the model or not
@@ -150,19 +178,28 @@ export const init = async model => {
       
    model.animate(() => {
 
-      let leftButtonCurr = buttonState.left[2].pressed
-
-      if (!leftButtonCurr && leftButtonPrev) {
-         showWhiteboard = !showWhiteboard;
+      whiteBoard.hud().scale(1, 1, .0001);
+      if(wbSwitch){
+         whiteBoard.scale(.001,.001,.0001);
       }
-      leftButtonPrev = leftButtonCurr
-
-      whiteBoard.scale(1, 1, .0001).opacity(showWhiteboard ? 1 : 0);
+      else{
+         whiteBoard.scale(1,1,.0001);
+      }
+      if(!wbCondswitch && buttonState.right[1].pressed){
+         wbFirstTime = false;
+         wbCondswitch = true;
+         wbSwitch = !wbSwitch;
+      }
+      else if(!buttonState.right[1].pressed){
+         wbCondswitch = false;
+      }
+      
+      // whiteBoard.hud().scale(1, 1, .0001).opacity(showWhiteboard ? 1 : .01);
 
       const walls = whiteBoard.getWalls(roomScale)
 
       walls.forEach(wall => {
-         const { direction, centerX, centerY, length } = wall;
+         const { direction, centerX, centerY, length, color } = wall;
          const drawnWallId = `${direction} ${centerX}${centerY} ${length}`;
          // Only draw the wall if it has not been drawn already
          if (!drawnWalls.includes(drawnWallId)) {
@@ -171,35 +208,38 @@ export const init = async model => {
                model.add('cube')
                   .move(centerX, 0.5, centerY)
                   .scale(length, wallHeight, wallThickness)
-                  .color('green')
+                  .color(color[0],color[1],color[2])
+                  .opacity(color[3])
                
             } else if (direction === 'vertical') {
                model.add('cube')
                   .move(centerX, 0.5, centerY)
                   .scale(wallThickness, wallHeight, length)
-                  .color('red')
+                  .color(color[0],color[1],color[2])
+                  .opacity(color[3])
 
             }
          }
       })
-
       let m = views[0]._viewMatrix;
       let ml = controllerMatrix.left;
-      handPanel.identity().scale(.3).move(3.35*ml.slice(12,15)[0],3.35*ml.slice(12,15)[1],3.35*ml.slice(12,15)[2]);
-      let hP = handPanel.getMatrix().slice(12,15);
-      handPanel.setMatrix([m[0],m[4],m[8],0,m[1],m[5],m[9],0,m[2],m[6],m[10],0,hP[0],hP[1],hP[2],1]).scale(.2,.2,.01);
-      if(!Condswitch && buttonState.left[1].pressed){
-         Condswitch = true;
-         Aswitch = !Aswitch;
-         if(Aswitch){
-            handPanel.opacity(.8);
-         }
-         else{
-            handPanel.opacity(.01);
-         }
+      // panel.identity().scale(.3).move(3.35*ml.slice(12,15)[0],3.35*ml.slice(12,15)[1],3.35*ml.slice(12,15)[2]);
+      // let hP = panel.getMatrix().slice(12,15);
+      // panel.setMatrix([m[0],m[4],m[8],0,m[1],m[5],m[9],0,m[2],m[6],m[10],0,hP[0],hP[1],hP[2],1]).scale(.2,.2,.01);
+      panel.hud().move(.3,-.2,1);
+      if(pSwitch){
+         panel.scale(.001,.001,.0001);
+      }
+      else{
+         panel.scale(.3,.3,.0001);
+      }
+      if(!pCondswitch && buttonState.left[1].pressed){
+         pFirstTime = false;
+         pCondswitch = true;
+         pSwitch = !pSwitch;
       }
       else if(!buttonState.left[1].pressed){
-         Condswitch = false;
+         pCondswitch = false;
       }
 
 
